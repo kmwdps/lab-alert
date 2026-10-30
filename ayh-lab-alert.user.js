@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AYH Lab Result Alert
 // @namespace    ayh-lab-alert
-// @version      1.9
+// @version      1.10
 // @updateURL    https://raw.githubusercontent.com/kmwdps/lab-alert/main/ayh-lab-alert.user.js
 // @downloadURL  https://raw.githubusercontent.com/kmwdps/lab-alert/main/ayh-lab-alert.user.js
 // @description  เฝ้าดูผลแล็บวันนี้ตาม HN (สูงสุด 15) เช็คทุก 5 นาที แจ้งเตือนเมื่อแล็บออก
@@ -432,7 +432,7 @@
     if (p.baseline && fresh.length) notifyDone(p, fresh, pend.length);
     p.seen = done.map((r) => r.key);
     p.baseline = true;
-    p.status = { done: done.map((r) => r.tests || r.reqNo), pending: pend.map((r) => r.tests || r.reqNo) };
+    p.status = { done: done.map((r) => ({ t: r.tests || r.reqNo, req: r.reqNo })), pending: pend.map((r) => r.tests || r.reqNo) };
     p.err = null;
     p.checkedAt = Date.now();
   }
@@ -577,8 +577,14 @@
       h += '<button data-a="del" data-hn="' + esc(p.hn) + '" title="เอาออก">✕</button></div>';
       if (p.err) h += '<div class="sm err">⚠ ' + esc(p.err) + '</div>';
       if (st) {
-        if (!st.done.length && !st.pending.length) h += '<div class="sm" style="color:#888">ยังไม่มีแล็บของวันนี้</div>';
-        if (st.done.length) h += '<div class="sm ok">' + st.done.map(esc).join(' · ') + '</div>';
+        if (!st.done.length && !st.pending.length) h += '<div class="sm" style="color:#888">ยังไม่มีแล็บ</div>';
+        if (st.done.length) {
+          h += '<div class="sm ok">' + st.done.map((d) => {
+            const t = typeof d === 'string' ? d : d.t;
+            const req = typeof d === 'string' ? '' : (d.req || '');
+            return '<span data-a="open" data-hn="' + esc(p.hn) + '" data-req="' + esc(req) + '" style="cursor:pointer;text-decoration:underline" title="เปิดผล">' + esc(t) + '</span>';
+          }).join(' · ') + '</div>';
+        }
         if (st.pending.length) h += '<div class="sm wait">รอ: ' + st.pending.map(esc).join(' · ') + '</div>';
         if (st.done.length && !st.pending.length) h += '<div class="sm ok"><b>ครบแล้ว</b></div>';
       } else if (!p.err) {
@@ -625,7 +631,7 @@
     else if (a === 'collapse') { collapsed = true; render(); }
     else if (a === 'expand') { collapsed = false; render(); }
     else if (a === 'debug') diagnose();
-    else if (a === 'open') openPatient(b.getAttribute('data-hn'));
+    else if (a === 'open') openPatient(b.getAttribute('data-hn'), b.getAttribute('data-req') || '');
     else if (a === 'test') {
       // หน่วง 5 วิ ให้สลับไปแท็บอื่นก่อนได้
       b.textContent = '⏳ 5 วิ…';
