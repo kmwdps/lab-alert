@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AYH Lab Result Alert
 // @namespace    ayh-lab-alert
-// @version      1.6
+// @version      1.7
 // @updateURL    https://raw.githubusercontent.com/kmwdps/lab-alert/main/ayh-lab-alert.user.js
 // @downloadURL  https://raw.githubusercontent.com/kmwdps/lab-alert/main/ayh-lab-alert.user.js
 // @description  เฝ้าดูผลแล็บวันนี้ตาม HN (สูงสุด 15) เช็คทุก 5 นาที แจ้งเตือนเมื่อแล็บออก
@@ -150,6 +150,15 @@
     return '';
   }
 
+  function findName(row) {
+    const tds = row.querySelectorAll ? [...row.querySelectorAll('td')] : [];
+    const byCol = tds.find((td) => { const c = td.getAttribute('aria-describedby') || ''; return /name$/i.test(c) && !/hosp|ward|test|doc|sect|user/i.test(c); });
+    if (byCol && txt(byCol).trim()) return txt(byCol).trim();
+    const thai = tds.map((td) => txt(td).trim()).filter((t) => t && t.length < 60 && !/Test:|Ward:/.test(t) && /[\u0E00-\u0E7F]/.test(t));
+    const pref = thai.find((t) => /^(นาย|นางสาว|นาง|น\.ส\.|ด\.ช\.|ด\.ญ\.|เด็ก)/.test(t));
+    return pref || thai[0] || '';
+  }
+
   function parseRows(doc) {
     const win = doc.defaultView;
     const out = [];
@@ -169,7 +178,7 @@
       const time = (rowText.match(DATE_RE) || [''])[0];
       const reqNo = (rowText.match(/\b\d{8,}\b/) || [''])[0];
       const tests = findTests(row);
-      out.push({ kind, row, rowText, reqNo, time, tests, today: isToday(rowText), key: reqNo || (tests + '@' + time) });
+      out.push({ kind, row, rowText, reqNo, time, tests, name: findName(row), today: isToday(rowText), key: reqNo || (tests + '@' + time) });
     }
     return out;
   }
@@ -360,7 +369,8 @@
   }
 
   function notifyDone(p, fresh, pendN) {
-    const title = 'Lab ออก HN ' + p.hn + (p.note ? ' (' + p.note + ')' : '');
+    const name = (fresh.find((r) => r.name) || {}).name || '';
+    const title = 'Lab ออก HN ' + p.hn + (name ? ' ' + name : '') + (p.note ? ' (' + p.note + ')' : '');
     const body = fresh.map((r) => '✅ ' + (r.tests || r.reqNo)).join('\n') +
       (pendN ? '\nยังรออีก ' + pendN + ' รายการ' : '\nครบทุกรายการของวันนี้แล้ว');
     sendNotif(title, body);
