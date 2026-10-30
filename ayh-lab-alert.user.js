@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AYH Lab Result Alert
 // @namespace    ayh-lab-alert
-// @version      1.10
+// @version      1.11
 // @updateURL    https://raw.githubusercontent.com/kmwdps/lab-alert/main/ayh-lab-alert.user.js
 // @downloadURL  https://raw.githubusercontent.com/kmwdps/lab-alert/main/ayh-lab-alert.user.js
 // @description  เฝ้าดูผลแล็บวันนี้ตาม HN (สูงสุด 15) เช็คทุก 5 นาที แจ้งเตือนเมื่อแล็บออก
@@ -399,6 +399,25 @@
     sendNotif(title, body, () => openPatient(p.hn, fresh[0] && fresh[0].reqNo));
   }
 
+  // หา cell คอลัมน์ "Lp" ของแถว (jqGrid: th id = aria-describedby ของ td)
+  function findLpCell(d, tr) {
+    if (!tr) return null;
+    const th = [...d.querySelectorAll('th')].find((h) => txt(h).trim() === 'Lp');
+    if (th && th.id) {
+      const td = [...tr.children].find((c) => c.getAttribute('aria-describedby') === th.id);
+      if (td) return td;
+    }
+    const td2 = [...tr.children].find((c) => /_lp$/i.test(c.getAttribute('aria-describedby') || ''));
+    if (td2) return td2;
+    // fallback: คอลัมน์ก่อนช่องสี St
+    const tds = [...tr.children];
+    const st = tds.findIndex((c) => [...c.querySelectorAll('*')].concat(c).some((e) => {
+      const r = e.getBoundingClientRect();
+      return r.width >= 5 && r.width <= 30 && colorKind(parseRgb(d.defaultView.getComputedStyle(e).backgroundColor));
+    }));
+    return st > 0 ? tds[st - 1] : null;
+  }
+
   // ---------- เปิดแล็บ HN ในหน้าที่เห็นอยู่ ----------
   async function openPatient(hn, reqNo) {
     const mainFrame = document.querySelector('iframe#FamSearch');
@@ -415,7 +434,17 @@
     for (let i = 0; i < 20; i++) {
       await sleep(500);
       const cell = [...d.querySelectorAll('td')].find((td) => txt(td).trim() === reqNo);
-      if (cell) { realClick(cell); return; }
+      if (!cell) continue;
+      const tr = cell.closest('tr');
+      realClick(cell); // เลือกแถว
+      await sleep(300);
+      const lp = findLpCell(d, tr);
+      if (lp) {
+        // คลิกไอคอนกระดาษในคอลัมน์ Lp เพื่อแสดงผล
+        const icon = lp.querySelector('img, a, i, span, button, div') || lp;
+        realClick(icon);
+      }
+      return;
     }
   }
 
