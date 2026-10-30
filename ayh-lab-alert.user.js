@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AYH Lab Result Alert
 // @namespace    ayh-lab-alert
-// @version      1.7
+// @version      1.8
 // @updateURL    https://raw.githubusercontent.com/kmwdps/lab-alert/main/ayh-lab-alert.user.js
 // @downloadURL  https://raw.githubusercontent.com/kmwdps/lab-alert/main/ayh-lab-alert.user.js
 // @description  เฝ้าดูผลแล็บวันนี้ตาม HN (สูงสุด 15) เช็คทุก 5 นาที แจ้งเตือนเมื่อแล็บออก
@@ -370,7 +370,7 @@
 
   function notifyDone(p, fresh, pendN) {
     const name = (fresh.find((r) => r.name) || {}).name || '';
-    const title = 'Lab ออก HN ' + p.hn + (name ? ' ' + name : '') + (p.note ? ' (' + p.note + ')' : '');
+    const title = 'Lab ออก HN ' + p.hn + (name ? ' ' + name : '');
     const body = fresh.map((r) => '✅ ' + (r.tests || r.reqNo)).join('\n') +
       (pendN ? '\nยังรออีก ' + pendN + ' รายการ' : '\nครบทุกรายการของวันนี้แล้ว');
     sendNotif(title, body);
@@ -512,7 +512,6 @@
     }
     const focused = document.activeElement && box.contains(document.activeElement) ? document.activeElement.id : null;
     const hnVal = (box.querySelector('#ala-hn') || {}).value || '';
-    const noteVal = (box.querySelector('#ala-note') || {}).value || '';
 
     let h = '<div class="hd"><b>🔔 Lab Alert (' + state.patients.length + '/' + MAX_HN + ')</b>' +
       '<button data-a="now" title="เช็คเดี๋ยวนี้">⟳</button>' +
@@ -520,15 +519,14 @@
       '<button data-a="collapse" title="ย่อ">▼</button></div>';
     h += '<div class="pt sm">' + esc(statusLine()) + '</div>';
     h += '<div class="pt" style="display:flex;gap:4px">' +
-      '<input id="ala-hn" placeholder="HN" style="width:90px" value="' + esc(hnVal) + '">' +
-      '<input id="ala-note" placeholder="เตียง/ชื่อย่อ" style="flex:1;min-width:0" value="' + esc(noteVal) + '">' +
+      '<input id="ala-hn" placeholder="HN" style="flex:1;min-width:0" value="' + esc(hnVal) + '">' +
       '<button data-a="add">เพิ่ม</button></div>';
 
     for (const p of state.patients) {
       const st = p.status;
       h += '<div class="pt' + (current === p.hn ? ' cur' : '') + '">';
       h += '<div style="display:flex;align-items:center;gap:6px"><b>' + esc(p.hn) + '</b>' +
-        '<span style="flex:1;color:#666">' + esc(p.note || '') + '</span>';
+        '<span style="flex:1"></span>';
       if (st) h += '<span class="ok">✅' + st.done.length + '</span> <span class="wait">⏳' + st.pending.length + '</span>';
       h += '<button data-a="del" data-hn="' + esc(p.hn) + '" title="เอาออก">✕</button></div>';
       if (p.err) h += '<div class="sm err">⚠ ' + esc(p.err) + '</div>';
@@ -555,15 +553,13 @@
 
   function addHN() {
     const hnEl = box.querySelector('#ala-hn');
-    const noteEl = box.querySelector('#ala-note');
     const hn = (hnEl.value || '').replace(/[\s-]/g, '');
     if (!/^\d{3,12}$/.test(hn)) { alert('HN ต้องเป็นตัวเลข'); return; }
     if (state.patients.some((p) => p.hn === hn)) { alert('HN นี้มีอยู่แล้ว'); return; }
     if (state.patients.length >= MAX_HN) { alert('ใส่ได้สูงสุด ' + MAX_HN + ' HN'); return; }
-    state.patients.push({ hn, note: (noteEl.value || '').trim(), seen: [], baseline: false, status: null, err: null, checkedAt: null });
+    state.patients.push({ hn, seen: [], baseline: false, status: null, err: null, checkedAt: null });
     save();
     hnEl.value = '';
-    noteEl.value = '';
     render();
     box.querySelector('#ala-hn').focus();
   }
@@ -602,7 +598,7 @@
     }
   });
   box.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && (e.target.id === 'ala-hn' || e.target.id === 'ala-note')) addHN();
+    if (e.key === 'Enter' && e.target.id === 'ala-hn') addHN();
   });
   document.addEventListener('click', initAudio, { once: true });
 
