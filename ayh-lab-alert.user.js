@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         AYH Lab Result Alert
 // @namespace    ayh-lab-alert
-// @version      1.8
+// @version      1.9
 // @updateURL    https://raw.githubusercontent.com/kmwdps/lab-alert/main/ayh-lab-alert.user.js
 // @downloadURL  https://raw.githubusercontent.com/kmwdps/lab-alert/main/ayh-lab-alert.user.js
 // @description  เฝ้าดูผลแล็บวันนี้ตาม HN (สูงสุด 15) เช็คทุก 5 นาที แจ้งเตือนเมื่อแล็บออก
@@ -26,6 +26,7 @@
   const KEY = 'ayhLabAlert.v1';
   const LOGIN = 'LOGIN';
   const PAGE_URL = location.origin + '/iReportAG/Result/ResView/Search'; // หน้าค้นหาจริง (อยู่ใน iframe #FamSearch)
+  const LOOKBACK_MS = 4 * 60 * 60 * 1000; // ดูแล็บที่สั่งตั้งแต่ (เวลาเพิ่ม HN - 4 ชม.)
   const DATE_RE = /\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}/;
 
   // ---------- sleep ผ่าน Worker (กัน Chrome หน่วง timer ตอนแท็บอยู่เบื้องหลัง) ----------
@@ -58,6 +59,7 @@
     catch (e) { return { patients: [], selector: '' }; }
   }
   const state = load();
+  for (const p of state.patients) if (!p.addedAt) p.addedAt = Date.now(); // HN เดิมจากเวอร์ชันก่อน
   const DEFAULT_IGNORE = [
     'Hemo C/S', 'Urine C/S', 'Sputum C/S', 'Gram Stain',
     'ABO Group (Gel Test)', 'Rh Group (Gel Test)', "Indirect Coombs' test (Gel Test)",
@@ -93,6 +95,14 @@
   function txt(el) { return (el.innerText || el.textContent || '').replace(/[ \t ]+/g, ' '); }
   function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   function hhmm(t) { const d = new Date(t); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+
+  function parseTs(text) {
+    const m = (text || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})\s+(\d{1,2}):(\d{2})/);
+    if (!m) return null;
+    let y = +m[3];
+    if (y > 2400) y -= 543;
+    return new Date(y, +m[2] - 1, +m[1], +m[4], +m[5]).getTime();
+  }
 
   function isToday(text) {
     const re = /(\d{1,2})\/(\d{1,2})\/(\d{4})\s+\d{1,2}:\d{2}/g;
@@ -178,7 +188,7 @@
       const time = (rowText.match(DATE_RE) || [''])[0];
       const reqNo = (rowText.match(/\b\d{8,}\b/) || [''])[0];
       const tests = findTests(row);
-      out.push({ kind, row, rowText, reqNo, time, tests, name: findName(row), today: isToday(rowText), key: reqNo || (tests + '@' + time) });
+      out.push({ kind, row, rowText, reqNo, time, tests, name: findName(row), today: isToday(rowText), ts: parseTs(time), key: reqNo || (tests + '@' + time) });
     }
     return out;
   }
@@ -325,6 +335,7 @@
   // ---------- notify ----------
   let actx = null;
   function initAudio() {
+    try { if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission(); } catch (e) { /* ignore */ }
     try {
       actx = actx || new (window.AudioContext || window.webkitAudioContext)();
       if (actx.state === 'suspended') actx.resume();
@@ -362,8 +373,20 @@
     }, 1000);
   }
 
-  function sendNotif(title, text) {
-    try { GM_notification({ title, text, silent: false, onclick: () => window.focus() }); } catch (e) { /* ignore */ }
+  function sendNotif(title, text, onOpen) {
+    const click = () => { try { window.focus(); } catch (e) { /* ignore */ } if (onOpen) onOpen(); };
+    let shown = false;
+    // ใช้ Notification ของเว็บก่อน (คลิกแล้วสลับมาแท็บนี้ได้แน่นอน) ถ้าไม่ได้สิทธิ์ค่อยใช้ของ Tampermonkey
+    try {
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const n = new Notification(title, { body: text, requireInteraction: true, tag: 'ayh-' + Date.now() });
+        n.onclick = () => { click(); n.close(); };
+        shown = true;
+      }
+    } catch (e) { /* ignore */ }
+    if (!shown) {
+      try { GM_notification({ title, text, silent: false, highlight: false, onclick: click }); } catch (e) { /* ignore */ }
+    }
     beep();
     flashTitle('🔔 ' + title);
   }
@@ -372,14 +395,35 @@
     const name = (fresh.find((r) => r.name) || {}).name || '';
     const title = 'Lab ออก HN ' + p.hn + (name ? ' ' + name : '');
     const body = fresh.map((r) => '✅ ' + (r.tests || r.reqNo)).join('\n') +
-      (pendN ? '\nยังรออีก ' + pendN + ' รายการ' : '\nครบทุกรายการของวันนี้แล้ว');
-    sendNotif(title, body);
+      (pendN ? '\nยังรออีก ' + pendN + ' รายการ' : '\nครบทุกรายการแล้ว');
+    sendNotif(title, body, () => openPatient(p.hn, fresh[0] && fresh[0].reqNo));
+  }
+
+  // ---------- เปิดแล็บ HN ในหน้าที่เห็นอยู่ ----------
+  async function openPatient(hn, reqNo) {
+    const mainFrame = document.querySelector('iframe#FamSearch');
+    const d = liveDoc(mainFrame && mainFrame.contentDocument);
+    if (!d) return;
+    const input = [...d.querySelectorAll('input[placeholder]')].find((i) => vis(i) && /HN/i.test(i.placeholder));
+    const btn = findButton(d);
+    if (!input || !btn) return;
+    setVal(input, hn);
+    await sleep(300);
+    realClick(btn);
+    if (!reqNo) return;
+    // รอผลแล้วคลิกใบที่เพิ่งออก ให้แสดงผลด้านล่าง
+    for (let i = 0; i < 20; i++) {
+      await sleep(500);
+      const cell = [...d.querySelectorAll('td')].find((td) => txt(td).trim() === reqNo);
+      if (cell) { realClick(cell); return; }
+    }
   }
 
   // ---------- check loop ----------
   async function checkPatient(p) {
     const { rows } = await searchHN(p.hn);
-    const today = rows.filter((r) => r.today).map((r) => Object.assign({}, r, { tests: keepTests(r.tests) }))
+    const since = (p.addedAt || Date.now()) - LOOKBACK_MS;
+    const today = rows.filter((r) => r.ts != null && r.ts >= since).map((r) => Object.assign({}, r, { tests: keepTests(r.tests) }))
       .filter((r) => r.tests !== '' || !rows.find((x) => x.key === r.key).tests);
     const done = today.filter((r) => r.kind === 'done');
     const pend = today.filter((r) => r.kind === 'pending');
@@ -525,7 +569,9 @@
     for (const p of state.patients) {
       const st = p.status;
       h += '<div class="pt' + (current === p.hn ? ' cur' : '') + '">';
-      h += '<div style="display:flex;align-items:center;gap:6px"><b>' + esc(p.hn) + '</b>' +
+      h += '<div style="display:flex;align-items:center;gap:6px">' +
+        '<b data-a="open" data-hn="' + esc(p.hn) + '" style="cursor:pointer;text-decoration:underline" title="เปิดแล็บ HN นี้">' + esc(p.hn) + '</b>' +
+        '<span class="sm" style="color:#888">+' + hhmm(p.addedAt || Date.now()) + '</span>' +
         '<span style="flex:1"></span>';
       if (st) h += '<span class="ok">✅' + st.done.length + '</span> <span class="wait">⏳' + st.pending.length + '</span>';
       h += '<button data-a="del" data-hn="' + esc(p.hn) + '" title="เอาออก">✕</button></div>';
@@ -557,7 +603,7 @@
     if (!/^\d{3,12}$/.test(hn)) { alert('HN ต้องเป็นตัวเลข'); return; }
     if (state.patients.some((p) => p.hn === hn)) { alert('HN นี้มีอยู่แล้ว'); return; }
     if (state.patients.length >= MAX_HN) { alert('ใส่ได้สูงสุด ' + MAX_HN + ' HN'); return; }
-    state.patients.push({ hn, seen: [], baseline: false, status: null, err: null, checkedAt: null });
+    state.patients.push({ hn, addedAt: Date.now(), seen: [], baseline: false, status: null, err: null, checkedAt: null });
     save();
     hnEl.value = '';
     render();
@@ -566,7 +612,7 @@
 
   box.addEventListener('click', (e) => {
     initAudio();
-    const b = e.target.closest('button');
+    const b = e.target.closest('[data-a]');
     if (!b) return;
     const a = b.getAttribute('data-a');
     if (a === 'add') addHN();
@@ -579,6 +625,7 @@
     else if (a === 'collapse') { collapsed = true; render(); }
     else if (a === 'expand') { collapsed = false; render(); }
     else if (a === 'debug') diagnose();
+    else if (a === 'open') openPatient(b.getAttribute('data-hn'));
     else if (a === 'test') {
       // หน่วง 5 วิ ให้สลับไปแท็บอื่นก่อนได้
       b.textContent = '⏳ 5 วิ…';

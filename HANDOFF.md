@@ -1,12 +1,12 @@
 # HANDOFF — AYH Lab Result Alert
 
-สรุปสำหรับคนที่จะมาแก้/ดูแลต่อ (อัปเดตล่าสุด: 30 ต.ค. 2569, v1.8)
+สรุปสำหรับคนที่จะมาแก้/ดูแลต่อ (อัปเดตล่าสุด: 30 ต.ค. 2569, v1.9)
 
 ## คืออะไร
 
 Tampermonkey userscript บนหน้า iReportAG ของ รพ.พระนครศรีอยุธยา
 (`https://ayhlab.ayhosp.go.th/iReportAG/Home/Result`) — ใส่ HN สูงสุด 15 ราย
-สคริปต์เช็คผลแล็บ **ของวันนี้** ทุก 5 นาที แล้วแจ้งเตือน (Windows notification + เสียง + ชื่อแท็บกะพริบ)
+สคริปต์เช็คผลแล็บที่สั่ง **ตั้งแต่ (เวลาเพิ่ม HN − 4 ชม.)** ทุก 5 นาที (ข้ามเที่ยงคืนได้) แล้วแจ้งเตือน (Windows notification + เสียง + ชื่อแท็บกะพริบ)
 เมื่อมีแล็บออก โดยบอก HN + ชื่อคนไข้ + ชื่อ test ที่ออก
 
 - ไฟล์หลัก: `ayh-lab-alert.user.js`
@@ -33,14 +33,14 @@ Tampermonkey userscript บนหน้า iReportAG ของ รพ.พระ�
 2. กรอก HN (native setter + input/change/keyup) → คลิก Search (pointer/mouse events + click)
 3. รอผล: ดึงแถวที่มี HN นั้น จนผลนิ่ง 2 รอบ (timeout 20 วิ)
 4. แยกแถว: หา element ขนาด 5–30px ที่ `background-color` แดง/ฟ้า → ขึ้นไปหา `tr`
-5. กรองเฉพาะวันนี้ + ตัด test ที่อยู่ในรายการไม่เตือน (ตัดราย test; ถ้าทั้งใบถูกตัด = ข้ามใบ)
+5. กรองเฉพาะ Request Time ≥ `addedAt − LOOKBACK_MS` (4 ชม.) + ตัด test ที่อยู่ในรายการไม่เตือน (ตัดราย test; ถ้าทั้งใบถูกตัด = ข้ามใบ)
 6. เทียบกับ `seen` (key = Request No.) → ใบที่ฟ้าใหม่ = แจ้งเตือน
    - เพิ่ม HN ครั้งแรก = baseline เงียบ (ไม่เตือนของที่ออกไปแล้ว)
 7. ใช้ Worker-based `sleep()` กัน Chrome หน่วง timer ตอนแท็บอยู่เบื้องหลัง
 
 ## ข้อมูลที่เก็บ
 
-- `GM_setValue('ayhLabAlert.v1')`: `patients[] {hn, seen[], baseline, status, err, checkedAt}`,
+- `GM_setValue('ayhLabAlert.v1')`: `patients[] {hn, addedAt, seen[], baseline, status, err, checkedAt}`,
   `ignore[]`, `ignoreVer`
 - เก็บแยกต่อเครื่อง/ต่อ browser, **ไม่เก็บชื่อคนไข้** (อ่านจากตารางตอนแจ้งเตือนเท่านั้น)
 - ไม่ส่งข้อมูลออกนอกเครื่อง
@@ -53,7 +53,7 @@ Indirect Coombs' test (Gel Test), HBsAg, Anti-HBs, Anti-HCV, HIV Ab (CMI)
 
 ## UI (กล่องส้มมุมซ้ายล่าง)
 
-ช่อง HN + เพิ่ม · ✕ เอาออก · ⟳ เช็คทันที · ⏸ หยุด · ▼ ย่อ · 🔕 รายการไม่เตือน ·
+ช่อง HN + เพิ่ม · คลิก HN = เปิดแล็บคนนั้น · `+HH:MM` = เวลาที่เพิ่ม · ✕ เอาออก · ⟳ เช็คทันที · ⏸ หยุด · ▼ ย่อ · 🔕 รายการไม่เตือน ·
 🔔 ทดสอบ (หน่วง 5 วิ) · Debug (คัดลอกโครงสร้างหน้าเว็บไป clipboard)
 
 ## ข้อกำหนดการใช้งาน
@@ -82,8 +82,11 @@ Indirect Coombs' test (Gel Test), HBsAg, Anti-HBs, Anti-HCV, HIV Ab (CMI)
 - 1.4 รายการไม่เตือน · 1.5 ปุ่มทดสอบแจ้งเตือน
 - 1.6 ค่า default ไม่เตือน 11 รายการ, ตัดราย test, UI 🔕, `@updateURL`
 - 1.7 ชื่อคนไข้ในหัวแจ้งเตือน · 1.8 เอาช่องเตียงออก (แจ้งแค่ HN + ชื่อ)
+- 1.9 ช่วงเวลา = เวลาเพิ่ม HN − 4 ชม. (แทน "วันนี้"); คลิก notification → สลับมาแท็บ + ค้น HN + เปิดใบที่ออก; ใช้ web Notification (ขอสิทธิ์ตอนคลิกกล่องครั้งแรก) fallback GM_notification
 
 ## ไอเดียที่ยังไม่ได้ทำ
+
+- ลบ HN อัตโนมัติหลัง X ชม. / ปุ่มล้างทั้งหมด (ยังไม่ได้ตัดสินใจ)
 
 - ส่งเข้ามือถือ (Telegram/ntfy) — ต้องระวัง PDPA: ไม่ส่งชื่อ/ค่าแล็บออกนอกเครือข่าย
 - แจ้งค่าวิกฤต (critical value)
