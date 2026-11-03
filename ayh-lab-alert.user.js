@@ -1,10 +1,10 @@
 // ==UserScript==
 // @name         AYH Lab Result Alert
 // @namespace    ayh-lab-alert
-// @version      1.11
+// @version      1.12
 // @updateURL    https://raw.githubusercontent.com/kmwdps/lab-alert/main/ayh-lab-alert.user.js
 // @downloadURL  https://raw.githubusercontent.com/kmwdps/lab-alert/main/ayh-lab-alert.user.js
-// @description  เฝ้าดูผลแล็บวันนี้ตาม HN (สูงสุด 15) เช็คทุก 5 นาที แจ้งเตือนเมื่อแล็บออก
+// @description  เฝ้าดูผลแล็บวันนี้ตาม HN (สูงสุด 15) เช็คทุก 3 นาที แจ้งเตือนเมื่อแล็บออก
 // @match        http://ayhlab.ayhosp.go.th/iReportAG/Home/Result*
 // @match        https://ayhlab.ayhosp.go.th/iReportAG/Home/Result*
 // @noframes
@@ -19,7 +19,7 @@
   'use strict';
 
   const MAX_HN = 15;
-  const INTERVAL_MS = 5 * 60 * 1000;
+  const INTERVAL_MS = 3 * 60 * 1000;
   const LOAD_TIMEOUT = 30000;
   const CONTROL_TIMEOUT = 15000;
   const RESULT_TIMEOUT = 20000;

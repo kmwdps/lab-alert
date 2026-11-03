@@ -1,6 +1,6 @@
 # AYH Lab Result Alert
 
-Tampermonkey userscript: เฝ้าดูผลแล็บวันนี้ใน iReportAG (ayhlab.ayhosp.go.th) ตาม HN สูงสุด 15 ราย เช็คทุก 5 นาที แจ้งเตือนเมื่อแล็บออก
+Tampermonkey userscript: เฝ้าดูผลแล็บวันนี้ใน iReportAG (ayhlab.ayhosp.go.th) ตาม HN สูงสุด 15 ราย เช็คทุก 3 นาที แจ้งเตือนเมื่อแล็บออก
 
 ## ติดตั้ง (ทำครั้งเดียวต่อเครื่อง)
 
